@@ -1,6 +1,48 @@
 ---
 name: lyrics-framework
-description: "Analyze Chinese pop lyrics to extract reusable structural frameworks, then fill new lyrics using the framework with three parallel AI models (codex, gemini, qwen). Use when the user provides song lyrics to analyze, wants to fill lyrics using an existing framework, or provides both lyrics and a theme/mood for end-to-end analysis + fill. Triggers on: 分析这首歌词, 提取歌词框架, 用框架填词, 帮我写歌词, 生成suno提示词, or any request involving Chinese song lyrics analysis or creation."
+description: "Analyze Chinese pop lyrics to extract reusable structural frameworks, then fill new lyrics using the framework with four parallel AI models (Claude, Codex, Gemini, Qwen). Use when the user provides song lyrics to analyze, wants to fill lyrics using an existing framework, or provides both lyrics and a theme/mood for end-to-end analysis + fill. Triggers on: 分析这首歌词, 提取歌词框架, 用框架填词, 帮我写歌词, 生成suno提示词, or any request involving Chinese song lyrics analysis or creation."
+---
+
+## Prerequisites
+
+### Required skills & tools
+
+- **codex:rescue** plugin (for framework verification + lyrics review):
+  ```
+  /plugin marketplace add openai/codex-plugin-cc
+  /plugin install codex@openai-codex
+  /reload-plugins
+  ```
+  Then authenticate: `!codex login`
+
+- **qwen-code** skill (for parallel lyrics generation):
+  Install via skillsmp or manually. Requires `qwen` CLI authenticated: `!qwen login`
+
+- **gemini-cli** MCP (for parallel lyrics generation):
+  Requires login: `!gemini auth login`
+  If unavailable, skip — Claude + Codex + Qwen will still run.
+
+### Python setup (for Sub-workflow A framework file generation)
+
+```bash
+pip install -r ~/.claude/skills/lyrics-framework/requirements.txt
+```
+
+The Python package is bundled at `~/.claude/skills/lyrics-framework/scripts/lyrics_framework_extraction/`.
+
+### Framework library
+
+- **Local path**: `/Users/wycm/lycris_skill/frameworks/`
+- **GitHub**: https://github.com/chen-da-pang/lyrics-frameworks-skill
+- **Clone on new machine**:
+  ```bash
+  git clone https://github.com/chen-da-pang/lyrics-frameworks-skill /Users/wycm/lycris_skill
+  ```
+- **index.yaml**: `/Users/wycm/lycris_skill/frameworks/index.yaml` — lists all available frameworks. Create if missing:
+  ```bash
+  echo "[]" > /Users/wycm/lycris_skill/frameworks/index.yaml
+  ```
+
 ---
 
 ## Overview
@@ -16,10 +58,10 @@ Two sub-workflows, often chained:
 
 ## AI Tools
 
-- **Codex** — via `codex:rescue` skill (plugin). Use `Skill("codex:rescue", args="<prompt>")`. If unavailable, skip and note it.
-- **Qwen** — via `qwen-code` skill. Use `Skill("qwen-code", args="<prompt>")`.
-- **Gemini** — via `gemini-cli` MCP server (tool: `gemini_ask`). If unavailable, skip and note it.
-- **Claude** — self, write directly in response.
+- **Codex** — via `codex:rescue` skill. Use `Skill("codex:rescue", args="<prompt>")`. If unavailable, skip and note it in the response; proceed with remaining models.
+- **Qwen** — via `qwen-code` skill. Use `Skill("qwen-code", args="<prompt>")`. If unavailable (auth expired), skip and note it; remind user to run `qwen login`.
+- **Gemini** — via `gemini-cli` MCP server (tool: `mcp__gemini-cli__ask-gemini`). If unavailable, skip and note it; remind user to run `gemini auth login`.
+- **Claude** — self, write directly in response. Always runs regardless of other tool availability.
 
 ---
 
@@ -66,6 +108,14 @@ Output to `/Users/wycm/lycris_skill/frameworks/{song_id}/`:
 - For S5/S6 (second-round verse/pre-chorus): state explicitly they are compressed returns of S1/S2 with line-by-line mapping (e.g. "L16 = L01+L02 合并压缩，L17 ≈ L03，L18 ≈ L04")
 - Do NOT bind to a specific rhyme vowel — describe rhyme logic only
 - Extract original song's main rhyme vowel from `rhyme_style` in `framework.yaml` — used in Sub-workflow B
+
+**After generating framework files — commit & push to GitHub:**
+```bash
+cd /Users/wycm/lycris_skill
+git add frameworks/{song_id}/ frameworks/index.yaml
+git commit -m "Add framework: {song_name}"
+git push
+```
 
 ---
 
@@ -144,9 +194,11 @@ After outputting, ask:
 
 ## Framework library
 
-- `/Users/wycm/lycris_skill/frameworks/` — framework files
-- `/Users/wycm/lycris_skill/frameworks/index.yaml` — index
-- `/Users/wycm/lycris_skill/src/lyrics_framework_extraction/` — Python package
+- **Local path**: `/Users/wycm/lycris_skill/frameworks/`
+- **GitHub**: https://github.com/chen-da-pang/lyrics-frameworks-skill
+- **Index**: `/Users/wycm/lycris_skill/frameworks/index.yaml`
+- **Python package**: `~/.claude/skills/lyrics-framework/scripts/lyrics_framework_extraction/`
+- **Render script**: `~/.claude/skills/lyrics-framework/scripts/render_lyrics_analysis_html.py`
 
 ## References
 

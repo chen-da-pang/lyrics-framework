@@ -1,4 +1,4 @@
 interface:
   display_name: "Lyrics Framework"
-  short_description: "Extract and fill song lyric frameworks"
+  short_description: "Extract structural frameworks from Chinese pop songs and fill new lyrics with AI. Requires codex:rescue, qwen-code, gemini-cli."
   default_prompt: "Analyze this song and extract a reusable lyrics framework"
