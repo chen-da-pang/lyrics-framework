@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lyrics Framework"
+  short_description: "Extract and fill song lyric frameworks"
+  default_prompt: "Analyze this song and extract a reusable lyrics framework"
