@@ -1,6 +1,6 @@
 ---
 name: lyrics-framework
-description: "Analyze Chinese pop lyrics to extract reusable structural frameworks, then fill new lyrics using the framework with four parallel AI models (Claude, Codex, Gemini, Qwen). Use when the user provides song lyrics to analyze, wants to fill lyrics using an existing framework, or provides both lyrics and a theme/mood for end-to-end analysis + fill. Triggers on: 分析这首歌词, 提取歌词框架, 用框架填词, 帮我写歌词, 生成suno提示词, or any request involving Chinese song lyrics analysis or creation."
+description: "Analyze Chinese pop lyrics to extract reusable structural frameworks, then fill new lyrics using the framework with two parallel AI models (Codex + Gemini). Use when the user provides song lyrics to analyze, wants to fill lyrics using an existing framework, or provides both lyrics and a theme/mood for end-to-end analysis + fill. Triggers on: 分析这首歌词, 提取歌词框架, 用框架填词, 帮我写歌词, 生成suno提示词, or any request involving Chinese song lyrics analysis or creation."
 ---
 
 > **Setup**: See `references/prerequisites.md` for installation instructions (codex:rescue, qwen-code, gemini-cli, Python, framework library clone).
@@ -10,7 +10,7 @@ description: "Analyze Chinese pop lyrics to extract reusable structural framewor
 Two sub-workflows, often chained:
 
 - **Sub-workflow A** — Lyrics → Framework: analyze a song, extract a reusable structural skeleton, store in the framework library
-- **Sub-workflow B** — Framework → Lyrics: fill new lyrics using a framework with four parallel AI models, review, output Suno format
+- **Sub-workflow B** — Framework → Lyrics: fill new lyrics using a framework with two parallel AI models (Codex + Gemini), review, output Suno format
 
 **User gives lyrics only** → run A  
 **User gives theme/mood only** → ask which framework from `index.yaml`, then run B  
@@ -18,10 +18,8 @@ Two sub-workflows, often chained:
 
 ## AI Tools
 
-- **Codex** — via `codex:rescue` skill. Use `Skill("codex:rescue", args="<prompt>")`. If unavailable, skip and note it in the response; proceed with remaining models.
-- **Qwen** — via `qwen-code` skill. Use `Skill("qwen-code", args="<prompt>")`. If unavailable (auth expired), skip and note it; remind user to run `qwen login`.
-- **Gemini** — via `gemini-cli` MCP server (tool: `mcp__gemini-cli__ask-gemini`). If unavailable, skip and note it; remind user to run `gemini auth login`.
-- **Claude** — self, write directly in response. Always runs regardless of other tool availability.
+- **Codex** — via `codex:rescue` skill. Use `Skill("codex:rescue", args="<prompt>")`. If unavailable, skip and note it in the response; proceed with Gemini only.
+- **Gemini** — via `gemini-cli` MCP server (tool: `mcp__gemini-cli__ask-gemini`). Style note: "偏意象化、诗意风格". If unavailable, skip and note it; remind user to run `gemini auth login`.
 
 ---
 
@@ -98,14 +96,9 @@ Hard constraints to include in every fill prompt:
 
 Add user's theme and mood.
 
-### Step 2: Parallel fill — four AI models
+### Step 2: Parallel fill — two AI models
 
-Run all four simultaneously:
-
-**Claude (self):**
-- Use the same fill prompt
-- Choose a writing style that best fits the user's story and mood — do not default to a fixed style, read the theme and decide
-- Write directly in the response, do not delegate
+Run both simultaneously:
 
 **Codex** (via `codex:rescue` skill):
 ```
@@ -115,11 +108,6 @@ Skill("codex:rescue", args="<fill prompt>")
 **Gemini** (via `gemini-cli` MCP tool `mcp__gemini-cli__ask-gemini`):
 - Same fill prompt + style note: "偏意象化、诗意风格"
 - If Gemini is unavailable (not logged in), skip and note it
-
-**Qwen** (via `qwen-code` skill):
-```bash
-qwen "<fill prompt>"
-```
 
 ### Step 3: Two-layer review
 
@@ -146,15 +134,16 @@ Combine both layers to determine the recommended version. Save full output as `l
 
 ### Step 4: Suno output
 
-Convert best-scoring version:
-- Segment tags: `[Verse 1]`, `[Pre-Chorus]`, `[Chorus]`, `[Verse 2]`, `[Bridge]`, `[Outro]`
-- Repeated chorus: use `[Chorus]` tag without repeating lyrics
-- Suno style prompt: English, ≤50 words, covering genre / mood / instruments / vocal style
-- Label the source clearly: "本版本由 [Claude / Codex / Gemini / Qwen] 创作"
+Save both versions to `/Users/wycm/lycris_skill/lyrics/story-{NN}-{image}.md` using the template at `/Users/wycm/lycris_skill/lyrics/TEMPLATE.md`. Each version includes:
+- Suno style prompt (English, ≤50 words: genre / mood / instruments / vocal style / BPM)
+- Full lyrics with segment tags: `[Verse 1]`, `[Pre-Chorus]`, `[Chorus]`, `[Verse 2]`, `[Bridge]`, `[Outro]`
+- Source label: "本版本由 [Codex / Gemini] 创作"
+- 审核意见: framework compliance summary + content quality scores (5 dimensions)
+- 综合推荐: ✅ 推荐 or ⚠️ 备选
 
 After outputting, ask:
 
-> 这版词满意吗？如果想看看其他 AI 的版本，可以告诉我——Claude、Codex、Gemini、Qwen 各写了一版。
+> 这两版词你更喜欢哪个？
 
 ---
 
@@ -163,6 +152,8 @@ After outputting, ask:
 - **Local path**: `/Users/wycm/lycris_skill/frameworks/`
 - **GitHub**: https://github.com/chen-da-pang/lyrics-frameworks-skill
 - **Index**: `/Users/wycm/lycris_skill/frameworks/index.yaml`
+- **Lyrics output**: `/Users/wycm/lycris_skill/lyrics/` — story-{NN}-{image}.md (not tracked by git)
+- **Lyrics template**: `/Users/wycm/lycris_skill/lyrics/TEMPLATE.md`
 - **Python package**: `~/.claude/skills/lyrics-framework/scripts/lyrics_framework_extraction/`
 - **Render script**: `~/.claude/skills/lyrics-framework/scripts/render_lyrics_analysis_html.py`
 
