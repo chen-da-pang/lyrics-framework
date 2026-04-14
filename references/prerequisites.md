@@ -10,12 +10,9 @@
   ```
   Then authenticate: `!codex login`
 
-- **qwen-code** skill (for parallel lyrics generation):
-  Install via skillsmp or manually. Requires `qwen` CLI authenticated: `!qwen login`
-
 - **gemini-cli** MCP (for parallel lyrics generation):
   Requires login: `!gemini auth login`
-  If unavailable, skip — Claude + Codex + Qwen will still run.
+  If unavailable, skip — Codex will still run.
 
 ## Python setup (for Sub-workflow A framework file generation)
 

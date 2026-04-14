@@ -3,7 +3,17 @@ name: lyrics-framework
 description: "Analyze Chinese pop lyrics to extract reusable structural frameworks, then fill new lyrics using the framework with two parallel AI models (Codex + Gemini). Use when the user provides song lyrics to analyze, wants to fill lyrics using an existing framework, or provides both lyrics and a theme/mood for end-to-end analysis + fill. Triggers on: 分析这首歌词, 提取歌词框架, 用框架填词, 帮我写歌词, 生成suno提示词, or any request involving Chinese song lyrics analysis or creation."
 ---
 
-> **Setup**: See `references/prerequisites.md` for installation instructions (codex:rescue, qwen-code, gemini-cli, Python, framework library clone).
+> **Setup**: See `references/prerequisites.md` for installation instructions (codex:rescue, gemini-cli, Python, framework library clone).
+
+## Configuration
+
+```yaml
+review_enabled: false   # Set to true to enable all review steps (default: off)
+```
+
+**To toggle review:** change `review_enabled` above. When `false`:
+- Sub-workflow A: skip Codex verification after segmentation (Step 1) and after rhyme analysis (Step 3)
+- Sub-workflow B: skip two-layer review entirely (Step 3); omit 审核意见 and 综合推荐 from Suno output
 
 ## Overview
 
@@ -32,6 +42,9 @@ Number each line `L01`, `L02`… if not already numbered. Apply rules in `refere
 - Output: `segment_id → line_range → role → round`
 
 Then use `codex:rescue` skill to independently verify the segment map:
+
+> **Skip if `review_enabled: false`**
+
 ```
 Skill("codex:rescue", args="按照分段规则，独立验证这份歌词的分段结果是否正确，列出你认为有问题的地方和理由。规则：~/.claude/skills/lyrics-framework/references/segmentation-rules.md [歌词和分段结果]")
 ```
@@ -49,6 +62,9 @@ For each line determine:
 Using `references/rhyme-taxonomy.md`, check all six dimensions for hidden techniques (inner rhyme, head rhyme chains, compound-syllable rhyme words, cross-辙 near-rhyme). Update rhyme audit with `inner_rhyme`, `head_rhyme`, `rhyme_length` fields.
 
 Then use `codex:rescue` skill to independently verify the rhyme analysis:
+
+> **Skip if `review_enabled: false`**
+
 ```
 Skill("codex:rescue", args="按照六维押韵体系，独立验证这份押韵分析是否有遗漏或误判，重点检查内韵、头韵链、叠韵词。规则：~/.claude/skills/lyrics-framework/references/rhyme-taxonomy.md [押韵分析内容]")
 ```
@@ -111,6 +127,8 @@ Skill("codex:rescue", args="<fill prompt>")
 
 ### Step 3: Two-layer review
 
+> **Skip this step if `review_enabled: false`** (see Configuration at top of skill). Go directly to Step 4.
+
 **Layer 1 — Framework compliance (Codex):**
 
 Pass all completed lyrics to `codex:rescue` skill for line-by-line review using the template in `references/review-prompt.md`:
@@ -138,8 +156,7 @@ Save both versions to `/Users/wycm/lycris_skill/lyrics/story-{NN}-{image}.md` us
 - Suno style prompt (English, ≤50 words: genre / mood / instruments / vocal style / BPM)
 - Full lyrics with segment tags: `[Verse 1]`, `[Pre-Chorus]`, `[Chorus]`, `[Verse 2]`, `[Bridge]`, `[Outro]`
 - Source label: "本版本由 [Codex / Gemini] 创作"
-- 审核意见: framework compliance summary + content quality scores (5 dimensions)
-- 综合推荐: ✅ 推荐 or ⚠️ 备选
+- 审核意见 and 综合推荐: **only include if `review_enabled: true`**
 
 After outputting, ask:
 
