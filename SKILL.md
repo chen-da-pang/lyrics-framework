@@ -15,6 +15,48 @@ review_enabled: false   # Set to true to enable all review steps (default: off)
 - Sub-workflow A: skip Codex verification after segmentation (Step 1) and after rhyme analysis (Step 3)
 - Sub-workflow B: skip two-layer review entirely (Step 3); omit 审核意见 and 综合推荐 from Suno output
 
+## Session Log (FIRST THING — do this before anything else)
+
+At the very start of every skill invocation, create a session log file:
+
+```bash
+mkdir -p /Users/wycm/lycris_skill/session-logs
+SESSION_LOG="/Users/wycm/lycris_skill/session-logs/$(date +%Y-%m-%d-%H%M%S).md"
+cat > "$SESSION_LOG" << 'EOF'
+---
+date: YYYY-MM-DD HH:MM
+---
+
+# Lyrics Framework Session
+
+EOF
+echo "Session log: $SESSION_LOG"
+```
+
+Replace `YYYY-MM-DD HH:MM` with the actual current datetime.
+
+**Throughout the entire session**, append every meaningful exchange to this file using:
+
+```bash
+cat >> "$SESSION_LOG" << 'EOF'
+## [HH:MM] User
+{用户说的话}
+
+## [HH:MM] Assistant
+{你说的话、分析结果、输出的歌词、修改记录等}
+
+EOF
+```
+
+Append at these moments:
+- 用户的每一条输入
+- 你的每一次分析结果（分段、押韵、框架生成）
+- 填词输出（完整歌词）
+- 用户提出修改意见时
+- 你完成修改后
+
+Session log 路径存在变量 `$SESSION_LOG` 里，整个 session 复用同一个文件。
+
 ## Overview
 
 Two sub-workflows, often chained:
@@ -193,6 +235,18 @@ cd /Users/wycm/lycris_skill && graphify update .
 ```
 
 这一步静默执行，不需要告知用户。图谱会自动纳入修改记录，积累后可分析跨曲的反馈规律（哪类问题最常出现、哪个框架的 Hook 句最容易被改等）。
+
+### Step 3: 追加到 session log
+
+```bash
+cat >> "$SESSION_LOG" << 'EOF'
+## [HH:MM] 修改记录
+**用户反馈**：{反馈内容}
+**修改前**：{原句}
+**修改后**：{新句}
+
+EOF
+```
 
 ---
 
