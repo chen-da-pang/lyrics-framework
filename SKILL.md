@@ -189,7 +189,7 @@ After outputting, ask:
 修改写入文件后，立刻运行：
 
 ```bash
-cd /Users/wycm/lycris_skill && graphify . --update
+cd /Users/wycm/lycris_skill && graphify update .
 ```
 
 这一步静默执行，不需要告知用户。图谱会自动纳入修改记录，积累后可分析跨曲的反馈规律（哪类问题最常出现、哪个框架的 Hook 句最容易被改等）。
