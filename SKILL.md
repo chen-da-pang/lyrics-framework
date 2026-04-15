@@ -1,61 +1,24 @@
 ---
 name: lyrics-framework
-description: "Analyze Chinese pop lyrics to extract reusable structural frameworks, then fill new lyrics using the framework with two parallel AI models (Codex + Gemini). Use when the user provides song lyrics to analyze, wants to fill lyrics using an existing framework, or provides both lyrics and a theme/mood for end-to-end analysis + fill. Triggers on: 分析这首歌词, 提取歌词框架, 用框架填词, 帮我写歌词, 生成suno提示词, or any request involving Chinese song lyrics analysis or creation."
+description: "Analyze Chinese pop lyrics to extract reusable structural frameworks, then fill new lyrics using the framework with two parallel AI models (Codex + Gemini). Use when the user provides song lyrics to analyze, wants to fill lyrics using an existing framework, or provides both lyrics and a theme/mood for end-to-end analysis + fill. Triggers on: 分析这首歌词, 提取歌词框架, 用框架填词, 帮我写歌词, 生成suno提示词."
 ---
 
 > **Setup**: See `references/prerequisites.md` for installation instructions (codex:rescue, gemini-cli, Python, framework library clone).
 
+## Hard Rules
+
+- **歌名/歌手**：用户没有提供就留空（`song_name: unknown`，`artist: unknown`），绝对不能虚构或猜测
+- **AI 工具失败**：Codex 或 Gemini 调用失败，直接报告失败原因，不能自己补写替代版本
+
 ## Configuration
 
 ```yaml
-review_enabled: false   # Set to true to enable all review steps (default: off)
+review_enabled: false   # Set to true to enable review steps (A: post-segmentation + post-rhyme; B: two-layer review + Suno audit fields)
 ```
 
-**To toggle review:** change `review_enabled` above. When `false`:
-- Sub-workflow A: skip Codex verification after segmentation (Step 1) and after rhyme analysis (Step 3)
-- Sub-workflow B: skip two-layer review entirely (Step 3); omit 审核意见 and 综合推荐 from Suno output
+## Session Log
 
-## Session Log (FIRST THING — do this before anything else)
-
-At the very start of every skill invocation, create a session log file:
-
-```bash
-mkdir -p /Users/wycm/lycris_skill/session-logs
-SESSION_LOG="/Users/wycm/lycris_skill/session-logs/$(date +%Y-%m-%d-%H%M%S).md"
-cat > "$SESSION_LOG" << 'EOF'
----
-date: YYYY-MM-DD HH:MM
----
-
-# Lyrics Framework Session
-
-EOF
-echo "Session log: $SESSION_LOG"
-```
-
-Replace `YYYY-MM-DD HH:MM` with the actual current datetime.
-
-**Throughout the entire session**, append every meaningful exchange to this file using:
-
-```bash
-cat >> "$SESSION_LOG" << 'EOF'
-## [HH:MM] User
-{用户说的话}
-
-## [HH:MM] Assistant
-{你说的话、分析结果、输出的歌词、修改记录等}
-
-EOF
-```
-
-Append at these moments:
-- 用户的每一条输入
-- 你的每一次分析结果（分段、押韵、框架生成）
-- 填词输出（完整歌词）
-- 用户提出修改意见时
-- 你完成修改后
-
-Session log 路径存在变量 `$SESSION_LOG` 里，整个 session 复用同一个文件。
+At the start of every invocation, create a timestamped session log in `/Users/wycm/lycris_skill/session-logs/`. See `references/session-log-guide.md` for the template and append rules. Use a background subagent for all log writes — never block the main workflow.
 
 ## Overview
 
@@ -70,8 +33,13 @@ Two sub-workflows, often chained:
 
 ## AI Tools
 
-- **Codex** — via `codex:rescue` skill. Use `Skill("codex:rescue", args="<prompt>")`. If unavailable, skip and note it in the response; proceed with Gemini only.
-- **Gemini** — via `gemini-cli` MCP server (tool: `mcp__gemini-cli__ask-gemini`). Style note: "偏意象化、诗意风格". If unavailable, skip and note it; remind user to run `gemini auth login`.
+Define once and reuse:
+```bash
+CODEX='node "/Users/wycm/.claude/plugins/cache/openai-codex/codex/1.0.3/scripts/codex-companion.mjs"'
+```
+
+- **Codex** — `$CODEX task --background --write`. Launch in background, get job-id immediately, poll with `$CODEX status`, fetch with `$CODEX result`. Do NOT use `codex:rescue` skill for fill tasks (it blocks).
+- **Gemini** — `mcp__gemini-cli__ask-gemini`. Style note: "偏意象化、诗意风格". If unavailable (429 or not logged in), report error and proceed with Codex only.
 
 ---
 
@@ -141,54 +109,59 @@ git push
 
 Read `framework-fillable.md`. Read `framework.yaml` → extract original main rhyme vowel from `rhyme_style`.
 
-Hard constraints to include in every fill prompt:
-```
-- 不能使用 [原曲主韵] 作为主韵，自选其他韵
-- 严格遵守每句字数，不能多也不能少
-- Hook句在全曲所有标注「← Hook句」的位置完全重复，一字不差
-- [押主韵]的句子句尾必须押选定的主韵
-- [掺韵]的句子故意不押主韵
-- S5/S6必须是S1/S2的压缩回返，不能重新创作新内容
-- 只输出歌词，每句标注行号，不要输出其他内容
-```
-
-Add user's theme and mood.
+Include the hard constraints from `references/fill-constraints.md` verbatim in every fill prompt, plus user's theme and mood.
 
 ### Step 2: Parallel fill — two AI models
 
-Run both simultaneously:
+> **PARALLEL**: Issue the Codex background launch (2a) and the Gemini call (2b) in the same response turn — do not wait for either before issuing the other.
 
-**Codex** (via `codex:rescue` skill):
-```
-Skill("codex:rescue", args="<fill prompt>")
+**Step 2a — Launch Codex in background:**
+
+Write the fill prompt to `/tmp/lyrics_fill_prompt.txt` first, then invoke via Python to avoid shell quoting issues:
+```bash
+# Write prompt to file first (avoids shell special-char expansion)
+cat > /tmp/lyrics_fill_prompt.txt << 'PROMPT_EOF'
+<fill prompt content here>
+PROMPT_EOF
+
+# Launch via Python — safe for any prompt content
+JOB_ID=$(python3 -c "
+import subprocess
+prompt = open('/tmp/lyrics_fill_prompt.txt').read()
+r = subprocess.run(
+    ['node', '/Users/wycm/.claude/plugins/cache/openai-codex/codex/1.0.3/scripts/codex-companion.mjs',
+     'task', '--background', '--write', prompt],
+    capture_output=True, text=True)
+print(r.stdout)
+" 2>&1 | grep -o 'task-[a-z0-9-]*')
+echo "Codex job: $JOB_ID"
 ```
 
-**Gemini** (via `gemini-cli` MCP tool `mcp__gemini-cli__ask-gemini`):
-- Same fill prompt + style note: "偏意象化、诗意风格"
-- If Gemini is unavailable (not logged in), skip and note it
+**Step 2b — Call Gemini immediately (same turn as 2a):**
+```
+mcp__gemini-cli__ask-gemini("<fill prompt> 偏意象化、诗意风格")
+```
+
+**Step 2c — After Gemini returns, poll Codex until done:**
+```bash
+$CODEX status $JOB_ID   # repeat until phase: done
+$CODEX result $JOB_ID   # fetch lyrics
+```
+
+If Codex fails or times out (>5 min), report the error and proceed with Gemini version only.  
+If Gemini fails (429 or unavailable), report the error and proceed with Codex version only.
 
 ### Step 3: Two-layer review
 
-> **Skip this step if `review_enabled: false`** (see Configuration at top of skill). Go directly to Step 4.
+> **Skip this step if `review_enabled: false`**. Go directly to Step 4.
 
 **Layer 1 — Framework compliance (Codex):**
 
-Pass all completed lyrics to `codex:rescue` skill for line-by-line review using the template in `references/review-prompt.md`:
-
-```
-Skill("codex:rescue", args="<review prompt with all lyrics>")
-```
-
-Checks: char count per line, rhyme correctness, Hook consistency, S5/S6 return quality.
+Pass all completed lyrics to `codex:rescue` skill for line-by-line review using the template in `references/review-prompt.md`. Checks: char count per line, rhyme correctness, Hook consistency, S5/S6 return quality.
 
 **Layer 2 — Content quality (parallel anonymous subagents):**
 
-Launch one subagent per version simultaneously. Label versions A/B/C — do NOT reveal which AI wrote which version. Each subagent rates independently on:
-1. 语感流畅度 (naturalness)
-2. 意象统一性 (imagery coherence)
-3. 情绪感染力 (emotional impact)
-4. 原创性 (originality)
-5. 主题契合度 (theme fit)
+Launch one subagent per version simultaneously. Label versions A/B/C — do NOT reveal which AI wrote which. Each rates independently on: 语感流畅度 / 意象统一性 / 情绪感染力 / 原创性 / 主题契合度.
 
 Combine both layers to determine the recommended version. Save full output as `lyrics-comparison.md` in the framework folder.
 
@@ -200,53 +173,31 @@ Save both versions to `/Users/wycm/lycris_skill/lyrics/story-{NN}-{image}.md` us
 - Source label: "本版本由 [Codex / Gemini] 创作"
 - 审核意见 and 综合推荐: **only include if `review_enabled: true`**
 
-After outputting, ask:
-
-> 这两版词你更喜欢哪个？
+After outputting, ask: 这两版词你更喜欢哪个？
 
 ---
 
 ## 修改记录工作流
 
-当用户对已输出的歌词提出任何修改意见时（改句子、换意象、调字数、重写某段等），执行以下流程：
+当用户对已输出的歌词提出任何修改意见时，执行以下流程：
 
 ### Step 1: 记录并修改
 
-按用户要求修改歌词，同时在对应 `lyrics/story-{NN}-{image}.md` 文件末尾的 `## 修改记录` 区块追加一条记录：
+按用户要求修改歌词，同时在对应 `lyrics/story-{NN}-{image}.md` 文件末尾的 `## 修改记录` 区块追加：
 
 ```markdown
 ### v{N} ({YYYY-MM-DD})
 
-**用户反馈**：{用户原话或归纳，保留原始表达}
+**用户反馈**：{用户原话或归纳}
 **修改类型**：{Hook句 / 意象 / 字数 / 押韵 / 情绪 / 结构 / 其他}
-**修改位置**：{段落 + 行，如 Chorus L3，或"整段重写"}
+**修改位置**：{段落 + 行}
 **修改前**：{原句}
 **修改后**：{新句}
 ```
 
-多处修改则追加多条记录，版本号递增。
+### Step 2: 追加到 session log（background subagent）
 
-### Step 2: 自动更新图谱
-
-修改写入文件后，立刻运行：
-
-```bash
-cd /Users/wycm/lycris_skill && graphify update .
-```
-
-这一步静默执行，不需要告知用户。图谱会自动纳入修改记录，积累后可分析跨曲的反馈规律（哪类问题最常出现、哪个框架的 Hook 句最容易被改等）。
-
-### Step 3: 追加到 session log
-
-```bash
-cat >> "$SESSION_LOG" << 'EOF'
-## [HH:MM] 修改记录
-**用户反馈**：{反馈内容}
-**修改前**：{原句}
-**修改后**：{新句}
-
-EOF
-```
+See `references/session-log-guide.md` for the modification record format.
 
 ---
 
@@ -257,8 +208,6 @@ EOF
 - **Index**: `/Users/wycm/lycris_skill/frameworks/index.yaml`
 - **Lyrics output**: `/Users/wycm/lycris_skill/lyrics/` — story-{NN}-{image}.md (not tracked by git)
 - **Lyrics template**: `/Users/wycm/lycris_skill/lyrics/TEMPLATE.md`
-- **Python package**: `~/.claude/skills/lyrics-framework/scripts/lyrics_framework_extraction/`
-- **Render script**: `~/.claude/skills/lyrics-framework/scripts/render_lyrics_analysis_html.py`
 
 ## References
 
@@ -266,4 +215,7 @@ EOF
 - `references/segmentation-rules.md` — segmentation signal rules
 - `references/semantic-roles.md` — 13 canonical semantic role tags
 - `references/rhyme-taxonomy.md` — six-dimension rhyme system + 十三辙
+- `references/fill-constraints.md` — hard constraints for every fill prompt
 - `references/review-prompt.md` — Codex review prompt template
+- `references/session-log-guide.md` — session log template and append rules
+
