@@ -3,7 +3,7 @@ name: lyrics-framework
 description: "Analyze Chinese pop lyrics to extract reusable structural frameworks, then fill new lyrics using the framework with two parallel AI models (Codex + Gemini). Use when the user provides song lyrics to analyze, wants to fill lyrics using an existing framework, or provides both lyrics and a theme/mood for end-to-end analysis + fill. Triggers on: 分析这首歌词, 提取歌词框架, 用框架填词, 帮我写歌词, 生成suno提示词."
 ---
 
-> **Setup**: See `references/prerequisites.md` for installation instructions (codex:rescue, gemini-cli, Python, framework library clone).
+> **Setup**: See `references/prerequisites.md` for installation instructions. **Before first use, edit `references/config.md` with your local paths** (framework library location + Codex binary path).
 
 ## Hard Rules
 
@@ -33,9 +33,12 @@ Two sub-workflows, often chained:
 
 ## AI Tools
 
-Define once and reuse:
+Read `references/config.md` at the start of every session to get `LYRICS_BASE` and `CODEX_BIN`.
+
 ```bash
-CODEX='node "/Users/wycm/.claude/plugins/cache/openai-codex/codex/1.0.3/scripts/codex-companion.mjs"'
+# Set from config.md values:
+LYRICS_BASE=/path/to/your/lyrics-base   # from config.md
+CODEX='node "/path/to/codex-companion.mjs"'  # from config.md
 ```
 
 - **Codex** — `$CODEX task --background --write`. Launch in background, get job-id immediately, poll with `$CODEX status`, fetch with `$CODEX result`. Do NOT use `codex:rescue` skill for fill tasks (it blocks).
@@ -81,7 +84,7 @@ Skill("codex:rescue", args="按照六维押韵体系，独立验证这份押韵�
 
 ### Step 4: Generate framework files
 
-Output to `/Users/wycm/lycris_skill/frameworks/{song_id}/`:
+Output to `$LYRICS_BASE/frameworks/{song_id}/`:
 - `framework.yaml` — three-layer structure (meta / segments / lines)
 - `framework-fillable.md` — fill template (see format rules below)
 - Update `/Users/wycm/lycris_skill/frameworks/index.yaml`
@@ -97,7 +100,7 @@ Output to `/Users/wycm/lycris_skill/frameworks/{song_id}/`:
 
 **After generating framework files — commit & push to GitHub:**
 ```bash
-cd /Users/wycm/lycris_skill
+cd $LYRICS_BASE
 git add frameworks/{song_id}/ frameworks/index.yaml
 git commit -m "Add framework: {song_name}"
 git push
@@ -170,7 +173,7 @@ Combine both layers to determine the recommended version. Save full output as `l
 
 ### Step 4: Suno output
 
-Save both versions to `/Users/wycm/lycris_skill/lyrics/story-{NN}-{image}.md` using the template at `/Users/wycm/lycris_skill/lyrics/TEMPLATE.md`. Each version includes:
+Save both versions to `$LYRICS_BASE/lyrics/story-{NN}-{image}.md` using the template at `$LYRICS_BASE/lyrics/TEMPLATE.md`. Each version includes:
 - Suno style prompt (English, ≤50 words: genre / mood / instruments / vocal style / BPM)
 - Full lyrics with segment tags: `[Verse 1]`, `[Pre-Chorus]`, `[Chorus]`, `[Verse 2]`, `[Bridge]`, `[Outro]`
 - Source label: "本版本由 [Codex / Gemini] 创作"
@@ -206,14 +209,15 @@ See `references/session-log-guide.md` for the modification record format.
 
 ## Framework library
 
-- **Local path**: `/Users/wycm/lycris_skill/frameworks/`
+- **Local path**: `$LYRICS_BASE/frameworks/` (set in `references/config.md`)
 - **GitHub**: https://github.com/chen-da-pang/lyrics-frameworks-skill
-- **Index**: `/Users/wycm/lycris_skill/frameworks/index.yaml`
-- **Lyrics output**: `/Users/wycm/lycris_skill/lyrics/` — story-{NN}-{image}.md (not tracked by git)
-- **Lyrics template**: `/Users/wycm/lycris_skill/lyrics/TEMPLATE.md`
+- **Index**: `$LYRICS_BASE/frameworks/index.yaml`
+- **Lyrics output**: `$LYRICS_BASE/lyrics/` — story-{NN}-{image}.md (not tracked by git)
+- **Lyrics template**: `$LYRICS_BASE/lyrics/TEMPLATE.md`
 
 ## References
 
+- `references/config.md` — **edit this first**: local paths (LYRICS_BASE, CODEX_BIN)
 - `references/prerequisites.md` — setup instructions (tools, Python, framework library)
 - `references/segmentation-rules.md` — segmentation signal rules
 - `references/semantic-roles.md` — 13 canonical semantic role tags
