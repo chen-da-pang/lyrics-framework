@@ -93,6 +93,8 @@ Output to `/Users/wycm/lycris_skill/frameworks/{song_id}/`:
 - Do NOT bind to a specific rhyme vowel — describe rhyme logic only
 - Extract original song's main rhyme vowel from `rhyme_style` in `framework.yaml` — used in Sub-workflow B
 
+**If framework files already exist for this song_id:** compare against the current analysis. If unchanged, skip regeneration — but confirm no git commit is needed. If any field differs, regenerate and commit.
+
 **After generating framework files — commit & push to GitHub:**
 ```bash
 cd /Users/wycm/lycris_skill
@@ -114,8 +116,9 @@ Include the hard constraints from `references/fill-constraints.md` verbatim in e
 ### Step 2: Parallel fill — two AI models
 
 > **PARALLEL**: Issue the Codex background launch (2a) and the Gemini call (2b) in the same response turn — do not wait for either before issuing the other.
+> **VIOLATION**: Issuing them in separate turns defeats parallel execution and wastes wall-clock time. Both tool calls must appear in the same assistant message.
 
-**Step 2a — Launch Codex in background:**
+**Step 2a — Launch Codex in background (ALWAYS use Python method — never pass prompt directly via shell):**
 
 Write the fill prompt to `/tmp/lyrics_fill_prompt.txt` first, then invoke via Python to avoid shell quoting issues:
 ```bash
@@ -173,7 +176,7 @@ Save both versions to `/Users/wycm/lycris_skill/lyrics/story-{NN}-{image}.md` us
 - Source label: "本版本由 [Codex / Gemini] 创作"
 - 审核意见 and 综合推荐: **only include if `review_enabled: true`**
 
-After outputting, ask: 这两版词你更喜欢哪个？
+> **REQUIRED after saving the file**: Ask the user: 这两版词你更喜欢哪个？
 
 ---
 
